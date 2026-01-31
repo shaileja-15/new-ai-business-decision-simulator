@@ -5,108 +5,122 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
 
-# --- PAGE CONFIG (Step 8: Dashboard Outputs) ---
+# -------------------------------
+# PAGE CONFIG (STEP 8: Dashboard Outputs)
+# -------------------------------
 st.set_page_config(page_title="AI Business Decision Simulator", layout="wide")
-st.title("📊 AI Business Decision Simulator")
-[cite_start]st.markdown("### Predict financial impact, risk, and growth before investing [cite: 87]")
+st.title("🧠 AI Business Decision Simulator")
+st.markdown("### *Simulate outcomes before you invest.*")
 st.divider()
 
-# --- STEP 5: DATA DESIGN (Synthetic Business Logic) ---
+# -------------------------------
+# DATA LOADING & MODEL TRAINING (STEP 5 & 6)
+# -------------------------------
 @st.cache_data
-def generate_business_data():
-    np.random.seed(42)
-    # [cite_start]Generating 100 rows of historical business performance [cite: 37, 50]
-    data = {
-        "price": np.random.randint(200, 2000, 100),
-        "marketing_spend": np.random.randint(5000, 50000, 100),
-        "inventory_level": np.random.randint(100, 2000, 100),
-        "employees": np.random.randint(5, 80, 100),
-        "revenue": np.random.randint(50000, 500000, 100),
-        "profit": np.random.randint(-10000, 100000, 100),
-        "risk_flag": np.random.choice([0, 1], 100),
-        "demand": np.random.randint(100, 1500, 100)
-    }
-    return pd.DataFrame(data)
+def load_and_train():
+    # Loading your actual CSV file
+    df = pd.read_csv("ai_business_decision_synthetic_data.csv")
+    
+    # Using features available in your dataset
+    features = ["price", "marketing_spend", "employees", "demand"]
+    X = df[features]
+    
+    # Model Logic as per Step 6
+    rev_model = LinearRegression().fit(X, df["revenue"])
+    profit_model = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, df["profit"])
+    risk_model = LogisticRegression(max_iter=1000).fit(X, df["risk_flag"])
+    
+    return rev_model, profit_model, risk_model, df, features
 
-df = generate_business_data()
-features = ["price", "marketing_spend", "inventory_level", "employees"]
+try:
+    rev_model, profit_model, risk_model, df, features = load_and_train()
+except Exception as e:
+    st.error(f"Error loading data: {e}. Please ensure the CSV is in the same folder.")
+    st.stop()
 
-# --- STEP 6: MODEL LOGIC ---
-# [cite_start]Predict revenue: Linear Regression 
-rev_model = LinearRegression().fit(df[features], df["revenue"])
-# [cite_start]Predict profit: Random Forest [cite: 54]
-profit_model = RandomForestRegressor(n_estimators=100).fit(df[features], df["profit"])
-# [cite_start]Predict risk: Logistic Regression [cite: 54]
-risk_model = LogisticRegression().fit(df[features], df["risk_flag"])
+# -------------------------------
+# SIDEBAR: USER INPUTS (STEP 4)
+# -------------------------------
+st.sidebar.header("🕹️ Decision Control Panel")
+st.sidebar.info("Adjust the sliders to simulate a business strategy.")
 
-# --- STEP 4: STRUCTURED INPUT (Business Manager Inputs) ---
-st.sidebar.header("🧠 Enter Business Decisions")
-[cite_start]price = st.sidebar.slider("Product Price", 200, 2000, 800) # [cite: 27]
-[cite_start]marketing = st.sidebar.slider("Monthly Marketing Spend", 5000, 50000, 15000) # [cite: 28]
-[cite_start]inventory = st.sidebar.slider("Inventory Quantity", 100, 2000, 500) # [cite: 29]
-[cite_start]employees = st.sidebar.slider("Employee Count", 5, 80, 25) # [cite: 30]
-[cite_start]market_cond = st.sidebar.selectbox("Market Condition", ["Growing", "Stable", "Declining"]) # [cite: 31]
+# Updated ranges based on your dataset statistics
+price = st.sidebar.slider("Product Price (₹)", 100, 3000, 800)
+marketing = st.sidebar.slider("Marketing Spend (₹)", 1000, 100000, 20000)
+employees = st.sidebar.slider("Employee Count", 1, 150, 25)
+u_demand = st.sidebar.slider("Expected Market Demand", 100, 10000, 1500)
+market_cond = st.sidebar.selectbox("Market Condition", df['market_condition'].unique())
 
-input_df = pd.DataFrame([[price, marketing, inventory, employees]], columns=features)
+input_data = pd.DataFrame([[price, marketing, employees, u_demand]], columns=features)
 
-# --- CALCULATE OUTPUTS ---
-pred_rev = rev_model.predict(input_df)[0]
-pred_profit = profit_model.predict(input_df)[0]
-[cite_start]risk_prob = risk_model.predict_proba(input_df)[0][1] # [cite: 9]
+# -------------------------------
+# PREDICTIONS & LOGIC (STEP 2)
+# -------------------------------
+pred_rev = rev_model.predict(input_data)[0]
+pred_profit = profit_model.predict(input_data)[0]
+risk_prob = risk_model.predict_proba(input_data)[0][1]
 
-# Output 4: Decision Score (Step 2)
-# [cite_start]Calculation: Weighted average of profit performance and risk avoidance [cite: 14]
-norm_profit = np.clip(pred_profit / 100000, 0, 1)
-decision_score = int(((norm_profit * 0.7) + ((1 - risk_prob) * 0.3)) * 100)
+# Output 4: Decision Score Calculation (0-100)
+# [cite_start]Higher profit and lower risk = higher score [cite: 108]
+score = int(np.clip((pred_profit / df['profit'].max()) * 70 + (1 - risk_prob) * 30, 0, 100))
 
-# --- STEP 8: DASHBOARD VIEW ---
-# [cite_start]Output 1: Financial Impact [cite: 3]
+# -------------------------------
+# DASHBOARD OUTPUTS (STEP 8)
+# -------------------------------
+# 🔹 Output 1: Financial Impact
 st.subheader("🔹 Output 1: Financial Impact")
-f_col1, f_col2, f_col3 = st.columns(3)
-[cite_start]f_col1.metric("Expected Revenue", f"₹{pred_rev:,.0f}") # [cite: 4]
-[cite_start]f_col2.metric("Expected Profit", f"₹{pred_profit:,.0f}") # [cite: 5]
-[cite_start]f_col3.metric("Operating Cost", f"₹{(pred_rev - pred_profit):,.0f}") # [cite: 6]
+col1, col2, col3 = st.columns(3)
+col1.metric("Expected Revenue", f"₹{pred_rev:,.0f}")
+col2.metric("Expected Profit", f"₹{pred_profit:,.0f}")
+col3.metric("Operating Cost", f"₹{(pred_rev - pred_profit):,.0f}")
 
-# [cite_start]Output 2 & 4: Risk and Score [cite: 7, 13]
 st.divider()
-o_col1, o_col2 = st.columns(2)
 
-with o_col1:
+# 🔹 Output 2 & 4: Risk and Score
+res_col1, res_col2 = st.columns(2)
+
+with res_col1:
     st.subheader("🔹 Output 2: Risk Analysis")
-    risk_level = "High" if risk_prob > 0.6 else "Medium" if risk_prob > 0.3 else "Low"
-    if risk_level == "High":
-        [cite_start]st.error(f"⚠️ {risk_level} Risk (Loss Probability: {risk_prob*100:.1f}%)") # [cite: 8, 9]
-    elif risk_level == "Medium":
-        st.warning(f"🔸 {risk_level} Risk (Loss Probability: {risk_prob*100:.1f}%)")
+    risk_lvl = "High" if risk_prob > 0.6 else "Medium" if risk_prob > 0.3 else "Low"
+    if risk_lvl == "High":
+        st.error(f"⚠️ {risk_lvl} Risk (Prob: {risk_prob*100:.1f}%)")
+    elif risk_lvl == "Medium":
+        st.warning(f"🔸 {risk_lvl} Risk (Prob: {risk_prob*100:.1f}%)")
     else:
-        st.success(f"✅ {risk_level} Risk (Loss Probability: {risk_prob*100:.1f}%)")
+        st.success(f"✅ {risk_lvl} Risk (Prob: {risk_prob*100:.1f}%)")
 
-with o_col2:
+with res_col2:
     st.subheader("🔹 Output 4: Decision Score")
-    score_label = "Better" if decision_score > 70 else "Average" if decision_score > 40 else "Poor"
-    st.title(f"{decision_score}/100")
-    [cite_start]st.write(f"This is considered a **{score_label}** decision. [cite: 15]")
+    decision_cat = "Better" if score > 70 else "Average" if score > 40 else "Poor"
+    st.title(f"{score}/100")
+    st.write(f"This is a **{decision_cat}** decision.")
 
-# [cite_start]Output 3: Growth Forecast (Next 6 Months) [cite: 10, 11]
 st.divider()
-st.subheader("🔹 Output 3: Growth Forecast")
-months = ["Current", "Month 2", "Month 3", "Month 4", "Month 5", "Month 6"]
-# Simulate trend based on marketing spend and market condition
-growth_multiplier = 1.05 if market_cond == "Growing" else 0.95 if market_cond == "Declining" else 1.0
-trend = [pred_rev * (growth_multiplier ** i) for i in range(6)]
-st.line_chart(pd.DataFrame(trend, index=months, columns=["Revenue Trend"]))
 
-# [cite_start]Output 5: Actionable Recommendation (Step 9: Explainable AI) [cite: 16, 72]
-st.divider()
-st.subheader("🔹 Output 5: Actionable Recommendation")
-if pred_profit < 0:
-    [cite_start]st.info("💡 **Recommendation:** Increase price or reduce employee count to fix negative ROI. [cite: 17, 18]")
-elif risk_prob > 0.5 and inventory > 1500:
-    [cite_start]st.warning("💡 **Recommendation:** Avoid overstocking. High inventory + low demand creates cash flow risk. [cite: 19, 77]")
-else:
-    [cite_start]st.success("💡 **Recommendation:** Strategy is balanced. Maintain current marketing spend. [cite: 17]")
+# 🔹 Output 5: AI Recommendation (STEP 9)
+st.subheader("🤖 Output 5: Actionable Recommendation")
+rec_col1, rec_col2 = st.columns(2)
 
-# [cite_start]Footer for Recruiters [cite: 86]
+with rec_col1:
+    if pred_profit < 0:
+        st.write("❌ **REDUCE:** Operating costs immediately. The strategy leads to a loss.")
+    elif marketing > 50000:
+        st.write("⚠️ **REDUCE:** High marketing spend relative to predicted profit.")
+    else:
+        st.write("✅ **MAINTAIN:** Current financial structure is sustainable.")
+
+with rec_col2:
+    if u_demand < 1000:
+        st.write("🚀 **INCREASE:** Efforts to capture market demand. Low volume detected.")
+    else:
+        st.write("✅ **AVOID:** Aggressive expansion; focus on maintaining current demand levels.")
+
+# -------------------------------
+# STEP 11: RECRUITER PITCH
+# -------------------------------
 st.sidebar.divider()
-st.sidebar.write("**Recruiter Pitch:**")
-[cite_start]st.sidebar.caption("This project helps businesses simulate decisions before investing money. It predicts financial outcomes, risk, and growth using ML. [cite: 87]")
+st.sidebar.markdown(
+    "**🗣️ Recruiter Pitch:**\n"
+    "*This project helps businesses simulate decisions before investing money. "
+    "It predicts financial outcomes, risk, and growth using machine learning.*"
+)
