@@ -1,218 +1,152 @@
-# =========================================================
-# AI BUSINESS DECISION SIMULATOR — PPT VISUAL VERSION
-# =========================================================
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.ensemble import RandomForestClassifier
 
 st.set_page_config(page_title="AI Business Decision Simulator", layout="wide")
 
-st.title("📊 AI Business Decision Simulator")
-st.caption("Industry-Based ML Decision Support")
+# -----------------------------
+# CUSTOM UI STYLE
+# -----------------------------
+st.markdown("""
+<style>
+.main-title {
+    font-size:38px;
+    font-weight:800;
+    color:#1f2937;
+}
+.insight-box {
+    padding:18px;
+    border-radius:12px;
+    background:#eef2ff;
+    font-size:18px;
+    font-weight:600;
+}
+.decision-box {
+    padding:22px;
+    border-radius:14px;
+    background:#dcfce7;
+    font-size:22px;
+    font-weight:800;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# =====================================================
-# DATA
-# =====================================================
+st.markdown('<div class="main-title">AI Business Decision Simulator</div>', unsafe_allow_html=True)
+st.caption("Company Decision Support System using Data + AI Logic")
 
-@st.cache_data
-def create_data():
-    np.random.seed(42)
-    n = 800
-
-    industry = np.random.choice(
-        ["Retail", "Ecommerce", "Finance", "Manufacturing"], n
-    )
-
-    df = pd.DataFrame({
-        "Industry": industry,
-        "Revenue": np.random.randint(50000, 500000, n),
-        "Cost": np.random.randint(20000, 400000, n),
-        "Employees": np.random.randint(5, 300, n),
-        "Marketing_Spend": np.random.randint(5000, 80000, n),
-        "Customer_Churn": np.random.uniform(0.05, 0.5, n)
-    })
-
-    df["Profit"] = df["Revenue"] - df["Cost"]
-    df["Profit_Margin"] = (df["Profit"] / df["Revenue"]) * 100
-    df["Revenue_per_Employee"] = df["Revenue"] / df["Employees"]
-    df["Marketing_Efficiency"] = df["Revenue"] / df["Marketing_Spend"]
-
-    df["Risk_Flag"] = np.where(
-        (df["Profit_Margin"] < 12) |
-        (df["Customer_Churn"] > 0.30) |
-        (df["Marketing_Efficiency"] < 4),
-        1, 0
-    )
-
-    return df
-
-
-df = create_data()
-
-# =====================================================
-# SIDEBAR INPUTS
-# =====================================================
-
-st.sidebar.header("📥 Scenario Inputs")
-
-industry_choice = st.sidebar.selectbox(
+# -----------------------------
+# INDUSTRY SELECTION
+# -----------------------------
+industry = st.selectbox(
     "Select Industry",
-    ["Retail", "Ecommerce", "Finance", "Manufacturing"]
+    ["Retail", "E-Commerce", "Manufacturing"]
 )
 
-revenue = st.sidebar.number_input("Revenue", 10000, 1000000, 200000)
-cost = st.sidebar.number_input("Cost", 5000, 900000, 120000)
-employees = st.sidebar.number_input("Employees", 1, 1000, 50)
-marketing = st.sidebar.number_input("Marketing Spend", 1000, 200000, 20000)
-churn = st.sidebar.slider("Customer Churn", 0.01, 0.60, 0.20)
+# Industry defaults
+defaults = {
+    "Retail": (50000, 220000, 160000, 80),
+    "E-Commerce": (70000, 300000, 210000, 45),
+    "Manufacturing": (120000, 500000, 420000, 180)
+}
 
-filtered_df = df[df["Industry"] == industry_choice]
+m_spend, revenue, cost, employees = defaults[industry]
 
-# =====================================================
-# ML MODEL
-# =====================================================
+col1, col2 = st.columns(2)
 
-features = [
-    "Revenue","Cost","Employees","Marketing_Spend",
-    "Customer_Churn","Profit_Margin",
-    "Revenue_per_Employee","Marketing_Efficiency"
-]
+with col1:
+    marketing = st.slider("Marketing Spend", 10000, 200000, m_spend)
+    emp = st.slider("Number of Employees", 10, 300, employees)
 
-X = filtered_df[features]
-y = filtered_df["Risk_Flag"]
+with col2:
+    rev = st.slider("Revenue", 50000, 800000, revenue)
+    cst = st.slider("Cost", 20000, 700000, cost)
 
-model = RandomForestClassifier()
-model.fit(X, y)
-
-# =====================================================
+# -----------------------------
 # START BUTTON
-# =====================================================
+# -----------------------------
+if st.button("Start Business Analysis"):
 
-if st.sidebar.button("▶️ Start Analysis"):
+    profit = rev - cst
+    profit_margin = profit / rev
+    revenue_per_employee = rev / emp
 
-    profit = revenue - cost
-    margin = (profit / revenue) * 100 if revenue > 0 else 0
-    rev_emp = revenue / employees if employees > 0 else 0
-    mkt_eff = revenue / marketing if marketing > 0 else 0
+    # Risk Logic
+    if profit_margin < 0.1:
+        risk = "High"
+        risk_val = 3
+    elif profit_margin < 0.25:
+        risk = "Medium"
+        risk_val = 2
+    else:
+        risk = "Low"
+        risk_val = 1
 
-    input_df = pd.DataFrame([[revenue,cost,employees,marketing,churn,
-                              margin,rev_emp,mkt_eff]], columns=features)
+    st.success("Analysis Generated")
 
-    pred = model.predict(input_df)[0]
-
-# =====================================================
-# KPI METRICS
-# =====================================================
-
-    st.subheader("📌 Key KPIs")
-
-    c1,c2,c3,c4 = st.columns(4)
-    c1.metric("Profit", f"{profit:,.0f}")
-    c2.metric("Margin %", f"{margin:.2f}")
-    c3.metric("Rev per Employee", f"{rev_emp:,.0f}")
-    c4.metric("Marketing Efficiency", f"{mkt_eff:.2f}")
-
-# =====================================================
-# VISUAL 1 — Revenue vs Cost
-# =====================================================
-
-    st.subheader("📊 Visual 1 — Revenue vs Cost")
+    # -----------------------------
+    # VISUAL 1 — Revenue vs Cost
+    # -----------------------------
+    st.subheader("Revenue vs Cost Comparison")
 
     fig1, ax1 = plt.subplots()
-    vals = [revenue, cost]
-    labs = ["Revenue","Cost"]
-
-    ax1.bar(labs, vals)
-
-    for i,v in enumerate(vals):
-        ax1.text(i, v, f"{v:,.0f}", ha="center")
-
+    ax1.bar(["Revenue","Cost"], [rev, cst])
+    ax1.set_title("Revenue vs Cost")
     st.pyplot(fig1)
 
-    st.markdown("**Insight:** Shows whether business earnings comfortably exceed expenses.")
+    st.markdown(
+        f'<div class="insight-box">Revenue = {rev:,} | Cost = {cst:,} → Profit = {profit:,}</div>',
+        unsafe_allow_html=True
+    )
 
-# =====================================================
-# VISUAL 2 — Profit / Loss Distribution (Industry)
-# =====================================================
-
-    st.subheader("📈 Visual 2 — Profit/Loss Distribution")
+    # -----------------------------
+    # VISUAL 2 — Profit Distribution
+    # -----------------------------
+    st.subheader("Profit Distribution")
 
     fig2, ax2 = plt.subplots()
-    ax2.hist(filtered_df["Profit"], bins=25)
-
+    vals = [abs(profit), cst]
+    labels = ["Profit","Cost"]
+    ax2.pie(vals, labels=labels, autopct="%1.1f%%")
     st.pyplot(fig2)
 
-    st.markdown("**Insight:** Displays how companies in this industry are performing overall.")
-
-# =====================================================
-# VISUAL 3 — Risk Level Indicator
-# =====================================================
-
-    st.subheader("⚠️ Visual 3 — Industry Risk Levels")
-
-    risk_counts = filtered_df["Risk_Flag"].value_counts()
+    # -----------------------------
+    # VISUAL 3 — Risk Indicator
+    # -----------------------------
+    st.subheader("Risk Level Indicator")
 
     fig3, ax3 = plt.subplots()
-    ax3.bar(["Safe","Risky"], risk_counts.values)
-
-    for i,v in enumerate(risk_counts.values):
-        ax3.text(i, v, str(v), ha="center")
-
+    ax3.bar(["Risk Level"], [risk_val])
+    ax3.set_yticks([1,2,3])
+    ax3.set_yticklabels(["Low","Medium","High"])
     st.pyplot(fig3)
 
-    st.markdown("**Insight:** Shows how many firms fall under high-risk vs safe category.")
-
-# =====================================================
-# VISUAL 4 — Employees vs Profit
-# =====================================================
-
-    st.subheader("👥 Visual 4 — Employees vs Profit")
-
-    sample = filtered_df.sample(150)
+    # -----------------------------
+    # VISUAL 4 — Employees vs Profit
+    # -----------------------------
+    st.subheader("Employees vs Profit")
 
     fig4, ax4 = plt.subplots()
-    ax4.scatter(sample["Employees"], sample["Profit"], alpha=0.5)
-
+    ax4.bar(["Employees","Profit"], [emp, profit])
+    ax4.set_title("Employee Count vs Profit")
     st.pyplot(fig4)
 
-    st.markdown("**Insight:** Indicates how workforce size impacts profitability.")
+    st.markdown(
+        f'<div class="insight-box">Revenue per Employee = {revenue_per_employee:,.0f}</div>',
+        unsafe_allow_html=True
+    )
 
-# =====================================================
-# BOLD DECISION OUTPUT
-# =====================================================
-
-    st.subheader("💡 FINAL AI DECISION")
-
-    if pred == 1:
-        st.markdown("""
-# 🔴 **HIGH BUSINESS RISK DETECTED**
-
-**Meaning:**  
-Profit margin or efficiency indicators are weak.  
-Customer churn or cost pressure is high.
-
-**Action:**  
-• Reduce operational cost  
-• Improve customer retention  
-• Optimize marketing ROI  
-""")
-
+    # -----------------------------
+    # FINAL DECISION OUTPUT
+    # -----------------------------
+    if profit_margin > 0.25 and risk == "Low":
+        decision = "INVEST & SCALE OPERATIONS"
+    elif profit_margin > 0.1:
+        decision = "OPTIMIZE COST & MARKETING"
     else:
-        st.markdown("""
-# 🟢 **LOW BUSINESS RISK — HEALTHY POSITION**
+        decision = "HIGH RISK — CONTROL COSTS"
 
-**Meaning:**  
-Margins and efficiency are strong.  
-Risk indicators are stable.
-
-**Action:**  
-• Scale operations gradually  
-• Increase smart marketing  
-• Invest in expansion
-""")
-
-else:
-    st.info("Enter inputs → Click Start Analysis")
+    st.markdown(
+        f'<div class="decision-box">Final AI Decision: {decision}</div>',
+        unsafe_allow_html=True
+    )
