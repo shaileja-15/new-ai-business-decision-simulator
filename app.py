@@ -24,33 +24,32 @@ X = df[features]
 # TRAIN MODELS
 # ---------------------------------
 revenue_model = LinearRegression().fit(X, df["revenue"])
-profit_model = RandomForestRegressor(n_estimators=100, random_state=42).fit(X, df["profit"])
-risk_model = LogisticRegression().fit(X, df["risk_flag"])
+profit_model = RandomForestRegressor(n_estimators=200, random_state=42).fit(X, df["profit"])
+risk_model = LogisticRegression(max_iter=1000).fit(X, df["risk_flag"])
 
 # ---------------------------------
 # SIDEBAR INPUTS
 # ---------------------------------
 st.sidebar.header("🧠 Business Decision Inputs")
 
-business_type = st.sidebar.selectbox(
-    "Business Type", ["Retail", "E-Commerce", "Manufacturing"]
-)
-
-market_condition = st.sidebar.selectbox(
-    "Market Condition", ["Stable", "Competitive", "Recession", "Growth"]
-)
-
 price = st.sidebar.slider("Product Price (₹)", 200, 2000, 800)
 marketing_spend = st.sidebar.slider("Marketing Spend (₹)", 5000, 50000, 15000)
 employees = st.sidebar.slider("Number of Employees", 5, 80, 25)
 demand = st.sidebar.slider("Expected Demand (Units)", 100, 1500, 600)
 
-start_analysis = st.sidebar.button("🚀 Start Analysis")
+# ---------------------------------
+# SESSION STATE FIX (prevents fade)
+# ---------------------------------
+if "run_analysis" not in st.session_state:
+    st.session_state.run_analysis = False
+
+if st.sidebar.button("🚀 Start Analysis"):
+    st.session_state.run_analysis = True
 
 # ---------------------------------
 # RUN ANALYSIS
 # ---------------------------------
-if start_analysis:
+if st.session_state.run_analysis:
 
     input_df = pd.DataFrame(
         [[price, marketing_spend, employees, demand]],
@@ -64,9 +63,7 @@ if start_analysis:
     cost = revenue - profit
     margin = (profit / revenue) * 100 if revenue > 0 else 0
 
-    # ---------------------------------
-    # RISK LEVEL
-    # ---------------------------------
+    # Risk Level
     if risk_probability > 0.7:
         risk_level = "High"
     elif risk_probability > 0.4:
@@ -74,119 +71,95 @@ if start_analysis:
     else:
         risk_level = "Low"
 
-    # ---------------------------------
-    # DECISION SCORE (0–100)
-    # ---------------------------------
+    # Decision Score
     score = 100
-    if profit < 0:
-        score -= 40
-    if margin < 10:
-        score -= 20
-    if risk_level == "High":
-        score -= 30
-    elif risk_level == "Medium":
-        score -= 15
-
+    if profit < 0: score -= 40
+    if margin < 10: score -= 20
+    if risk_level == "High": score -= 30
+    elif risk_level == "Medium": score -= 15
     score = max(score, 0)
 
     # ---------------------------------
-    # KPI SECTION
+    # KPI BLOCK
     # ---------------------------------
     st.subheader("📌 Key Business Outcomes")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Revenue", f"₹ {revenue:,.0f}")
+    c2.metric("Profit", f"₹ {profit:,.0f}")
+    c3.metric("Margin %", f"{margin:.1f}%")
+    c4.metric("Decision Score", f"{score}/100")
 
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Revenue", f"₹ {revenue:,.0f}")
-    k2.metric("Profit", f"₹ {profit:,.0f}")
-    k3.metric("Profit Margin", f"{margin:.1f}%")
-    k4.metric("Decision Score", f"{score}/100")
+    # ---------------------------------
+    # ADVANCED INSIGHT: FEATURE IMPACT
+    # ---------------------------------
+    st.subheader("🔍 Feature Impact on Profit")
+
+    importances = profit_model.feature_importances_
+    imp_df = pd.DataFrame({
+        "Feature": features,
+        "Impact": importances
+    }).sort_values("Impact", ascending=False)
+
+    fig_imp, ax_imp = plt.subplots()
+    ax_imp.bar(imp_df["Feature"], imp_df["Impact"])
+    st.pyplot(fig_imp)
+
+    # ---------------------------------
+    # FINANCIAL BAR CHART
+    # ---------------------------------
+    fig1, ax1 = plt.subplots()
+    ax1.bar(["Revenue", "Cost", "Profit"], [revenue, cost, profit])
+    st.pyplot(fig1)
+
+    # ---------------------------------
+    # SAFE PIE
+    # ---------------------------------
+    fig2, ax2 = plt.subplots()
+    if profit >= 0:
+        ax2.pie([cost, profit], labels=["Cost","Profit"], autopct="%1.1f%%")
+    else:
+        ax2.pie([cost, abs(profit)], labels=["Cost","Loss"], autopct="%1.1f%%")
+    ax2.axis("equal")
+    st.pyplot(fig2)
+
+    # ---------------------------------
+    # WHAT-IF SCENARIO TABLE
+    # ---------------------------------
+    st.subheader("📈 What-If Scenario Comparison")
+
+    scenarios = []
+    for m in [0.8, 1.0, 1.2]:
+        temp = pd.DataFrame([[price*m, marketing_spend, employees, demand]], columns=features)
+        scenarios.append({
+            "Price": price*m,
+            "Predicted Profit": profit_model.predict(temp)[0]
+        })
+
+    st.dataframe(pd.DataFrame(scenarios))
 
     # ---------------------------------
     # RISK MESSAGE
     # ---------------------------------
     if risk_level == "High":
-        st.error("⚠️ High-risk decision: financial or customer instability detected.")
+        st.error("⚠️ High risk strategy")
     elif risk_level == "Medium":
-        st.warning("⚠️ Moderate risk: strategy needs optimization.")
+        st.warning("⚠️ Moderate risk strategy")
     else:
-        st.success("✅ Low-risk decision: strategy is stable.")
-
-    # ============================================================
-    # 📊 VISUAL 1: REVENUE vs COST vs PROFIT (Core financial view)
-    # ============================================================
-    st.subheader("📊 Financial Performance Overview")
-
-    fig1, ax1 = plt.subplots()
-    ax1.bar(["Revenue", "Cost", "Profit"], [revenue, cost, profit])
-    ax1.set_ylabel("Amount (₹)")
-    st.pyplot(fig1)
-
-    st.caption("💡 Insight: A healthy strategy shows revenue significantly higher than cost.")
-
-    # ============================================================
-    # 📊 VISUAL 2: COST vs PROFIT / LOSS DISTRIBUTION (Safe pie)
-    # ============================================================
-    fig2, ax2 = plt.subplots()
-
-    if profit >= 0:
-        values = [cost, profit]
-        labels = ["Cost", "Profit"]
-    else:
-        values = [cost, abs(profit)]
-        labels = ["Cost", "Loss"]
-
-    ax2.pie(values, labels=labels, autopct="%1.1f%%", startangle=90)
-    ax2.axis("equal")
-    st.pyplot(fig2)
-
-    st.caption("💡 Insight: Higher profit share indicates better capital efficiency.")
-
-    # ============================================================
-    # 📊 VISUAL 3: PRICE vs PROFIT SENSITIVITY (What-if analysis)
-    # ============================================================
-    st.subheader("📈 Price Sensitivity Analysis")
-
-    price_range = np.linspace(price * 0.8, price * 1.2, 10)
-    simulated_profit = []
-
-    for p in price_range:
-        temp_df = pd.DataFrame([[p, marketing_spend, employees, demand]], columns=features)
-        simulated_profit.append(profit_model.predict(temp_df)[0])
-
-    fig3, ax3 = plt.subplots()
-    ax3.plot(price_range, simulated_profit, marker="o")
-    ax3.set_xlabel("Price (₹)")
-    ax3.set_ylabel("Predicted Profit")
-    st.pyplot(fig3)
-
-    st.caption("💡 Insight: Identify the price point where profit peaks.")
-
-    # ============================================================
-    # 📊 VISUAL 4: DECISION QUALITY GAUGE (Simulated)
-    # ============================================================
-    st.subheader("🎯 Decision Quality Indicator")
-
-    fig4, ax4 = plt.subplots()
-    ax4.barh(["Decision Quality"], [score])
-    ax4.set_xlim(0, 100)
-    st.pyplot(fig4)
-
-    st.caption("💡 Insight: Scores above 70 indicate strong, sustainable decisions.")
+        st.success("✅ Low risk strategy")
 
     # ---------------------------------
-    # 🤖 AI DECISION COMMENTS
+    # SMART AI RECOMMENDATIONS
     # ---------------------------------
-    st.subheader("🤖 AI Decision Commentary")
+    st.subheader("🤖 AI Strategic Recommendations")
 
-    if profit < 0:
-        st.write("🔴 This strategy leads to losses. Reduce costs or revise pricing.")
-    if marketing_spend > 40000:
-        st.write("🟠 Marketing spend is high; monitor ROI carefully.")
-    if employees > 50 and profit < 0:
-        st.write("🟠 Overstaffing detected. Consider productivity optimization.")
-    if margin > 20 and risk_level == "Low":
-        st.write("🟢 Strong decision: good margin with low risk.")
+    if margin < 15:
+        st.write("• Increase price or reduce operational cost")
+    if marketing_spend > revenue * 0.4:
+        st.write("• Marketing overspend detected — optimize ROI")
+    if demand > 1000 and employees < 20:
+        st.write("• Demand high — consider scaling workforce")
     if score > 75:
-        st.write("✅ Recommended strategy: financially sound and scalable.")
+        st.write("• Strategy is scalable and safe to expand")
 
 else:
-    st.info("⬅️ Enter inputs and click **Start Analysis** to generate results.")
+    st.info("⬅️ Click Start Analysis to run model")
